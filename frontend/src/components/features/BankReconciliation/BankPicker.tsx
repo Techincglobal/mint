@@ -1,12 +1,14 @@
 import { useAtom, useSetAtom } from "jotai"
 import { SelectedBank, selectedBankAccountAtom } from "./bankRecAtoms"
-import { useCallback } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useGetBankAccounts, useGetUnreconciledTransactions } from "./utils"
 import { cn } from "@/lib/utils"
-import { Landmark } from "lucide-react"
+import { Landmark, Search } from "lucide-react"
 import { H4 } from "@/components/ui/typography"
 import { getTimeago } from "@/lib/date"
 import ErrorBanner from "@/components/ui/error-banner"
+import { Input } from "@/components/ui/input"
+import Fuse from "fuse.js"
 import _ from "@/lib/translate"
 
 const BankPicker = ({ className, size = 'base' }: { className?: string, size?: 'base' | 'sm' }) => {
@@ -27,6 +29,29 @@ const BankPicker = ({ className, size = 'base' }: { className?: string, size?: '
 
     const { banks, isLoading, error } = useGetBankAccounts(onLoadingSuccess)
 
+    const [bankSearch, setBankSearch] = useState('')
+
+    const bankSearchIndex = useMemo(() => {
+        if (!banks) {
+            return null
+        }
+        return new Fuse(banks, {
+            keys: ['account_name', 'bank', 'bank_account_no'],
+            threshold: 0.4,
+            includeScore: true
+        })
+    }, [banks])
+
+    const filteredBanks = useMemo(() => {
+        if (!bankSearchIndex || !bankSearch || !banks) {
+            return banks ?? []
+        }
+        const matches = bankSearchIndex.search(bankSearch).map((result) => result.item)
+        const matchedNames = new Set(matches.map((bank) => bank.name))
+        const rest = banks.filter((bank) => !matchedNames.has(bank.name))
+        return [...matches, ...rest]
+    }, [bankSearchIndex, bankSearch, banks])
+
     if (isLoading) {
         return null
     }
@@ -35,20 +60,32 @@ const BankPicker = ({ className, size = 'base' }: { className?: string, size?: '
         return <ErrorBanner error={error} />
     }
     return (
-        <div
-            className={cn("flex gap-3 items-stretch w-full overflow-x-auto bank-picker-scrollbar pr-4",
-                banks?.length > 4 ? 'pb-2' : '', className,
-            )}
-            style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: 'rgb(209 213 219) rgb(243 244 246)',
-            }}
-        >
-            {
-                banks?.map((bank) => (
-                    <BankPickerItem key={bank.name} bank={bank} size={size} />
-                ))
-            }
+        <div className={cn("flex flex-col gap-2 w-full", className)}>
+            <div className="flex w-full gap-2">
+                <label className="sr-only">{_("Search bank accounts")}</label>
+                <div className={cn("flex items-center gap-2 w-full max-w-sm rounded-md dark:bg-input/30 border-input border bg-transparent px-2 text-base shadow-xs transition-[color,box-shadow] outline-none",
+                    "focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]"
+                )}>
+                    <Search className="w-5 h-5 text-muted-foreground" />
+                    <Input placeholder={_("Search bank accounts")} type='search' onChange={(e) => setBankSearch(e.target.value)} defaultValue={bankSearch}
+                        className="border-none px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+                </div>
+            </div>
+            <div
+                className={cn("flex gap-3 items-stretch w-full overflow-x-auto bank-picker-scrollbar pr-4",
+                    banks?.length > 4 ? 'pb-2' : ''
+                )}
+                style={{
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: 'rgb(209 213 219) rgb(243 244 246)',
+                }}
+            >
+                {
+                    filteredBanks.map((bank) => (
+                        <BankPickerItem key={bank.name} bank={bank} size={size} />
+                    ))
+                }
+            </div>
         </div>
     )
 }

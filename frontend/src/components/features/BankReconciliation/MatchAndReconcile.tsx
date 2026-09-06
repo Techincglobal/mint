@@ -1,14 +1,14 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai"
 import { bankRecAmountFilter, bankRecDateAtom, bankRecRecordJournalEntryModalAtom, bankRecRecordPaymentModalAtom, bankRecSelectedTransactionAtom, bankRecTransactionTypeFilter, bankRecTransferModalAtom, selectedBankAccountAtom } from "./bankRecAtoms"
 import { H4 } from "@/components/ui/typography"
-import { useMemo, useRef } from "react"
+import { useMemo, useRef, useState } from "react"
 import { getCompanyCurrency } from "@/lib/company"
 import ErrorBanner from "@/components/ui/error-banner"
 import { Separator } from "@/components/ui/separator"
 import Fuse from 'fuse.js'
 import { getSearchResults, LinkedPayment, UnreconciledTransaction, useGetRuleForTransaction, useGetUnreconciledTransactions, useGetVouchersForTransaction, useIsTransactionWithdrawal, useReconcileTransaction, useTransactionSearch } from "./utils"
 import { Input } from "@/components/ui/input"
-import { AlertCircle, ArrowDownRight, ArrowRightIcon, ArrowRightLeft, ArrowUpRight, BadgeCheck, ChevronDown, DollarSign, Landmark, LandmarkIcon, ListIcon, Loader2, Receipt, ReceiptIcon, Search, User, XCircle, ZapIcon } from "lucide-react"
+import { AlertCircle, ArrowDownRight, ArrowRightIcon, ArrowRightLeft, ArrowUpRight, BadgeCheck, ChevronDown, DollarSign, Landmark, LandmarkIcon, ListIcon, Loader2, Receipt, ReceiptIcon, Search, ZapIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
@@ -535,7 +535,7 @@ const OptionsForSingleTransaction = ({ transaction, contentHeight }: { transacti
             </div>
         </TooltipProvider>
         {transaction.matched_rule && <RuleAction transaction={transaction} />}
-        <VouchersForTransaction transaction={transaction} contentHeight={contentHeight} />
+        <VouchersForTransaction key={transaction.name} transaction={transaction} contentHeight={contentHeight} />
     </div>
 }
 
@@ -698,6 +698,26 @@ const VouchersForTransaction = ({ transaction, contentHeight }: { transaction: U
 
     const { data: vouchers, isLoading, error } = useGetVouchersForTransaction(transaction)
 
+    const [voucherSearch, setVoucherSearch] = useState('')
+
+    const voucherSearchIndex = useMemo(() => {
+        if (!vouchers?.message) {
+            return null
+        }
+        return new Fuse(vouchers.message, {
+            keys: ['name', 'party', 'reference_no'],
+            threshold: 0.4,
+            includeScore: true
+        })
+    }, [vouchers?.message])
+
+    const filteredVouchers = useMemo(() => {
+        if (!voucherSearchIndex || !voucherSearch) {
+            return vouchers?.message ?? []
+        }
+        return voucherSearchIndex.search(voucherSearch).map((result) => result.item)
+    }, [voucherSearchIndex, voucherSearch, vouchers?.message])
+
     if (error) {
         return <ErrorBanner error={error} />
     }
@@ -724,6 +744,21 @@ const VouchersForTransaction = ({ transaction, contentHeight }: { transaction: U
             <span>or</span>
             <Separator className="flex-1" />
         </div>
+        {vouchers?.message.length !== 0 &&
+            <div className="flex py-1 w-full gap-2">
+                <label className="sr-only">{_("Search vouchers")}</label>
+                <div className={cn("flex items-center gap-2 w-full rounded-md dark:bg-input/30 border-input border bg-transparent px-2 text-base shadow-xs transition-[color,box-shadow] outline-none",
+                    "focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]"
+                )}>
+                    <Search className="w-5 h-5 text-muted-foreground" />
+                    <Input placeholder={_("Search vouchers")} type='search' onChange={(e) => setVoucherSearch(e.target.value)} defaultValue={voucherSearch}
+                        className="border-none px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+                    <div>
+                        <span className="text-sm text-muted-foreground text-nowrap whitespace-nowrap">{filteredVouchers.length} {_(filteredVouchers.length === 1 ? "result" : "results")}</span>
+                    </div>
+                </div>
+            </div>
+        }
         {vouchers?.message.length === 0 && <Empty className="h-64 my-4">
             <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -732,13 +767,22 @@ const VouchersForTransaction = ({ transaction, contentHeight }: { transaction: U
                 <EmptyTitle>{_("No vouchers found for this transaction")}</EmptyTitle>
             </EmptyHeader>
         </Empty>}
+        {vouchers?.message.length !== 0 && filteredVouchers.length === 0 &&
+            <Empty className="h-64 my-4">
+                <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                        <Search />
+                    </EmptyMedia>
+                    <EmptyTitle>{_("No vouchers found for the given search.")}</EmptyTitle>
+                </EmptyHeader>
+            </Empty>}
         <Virtuoso
-            data={vouchers?.message}
+            data={filteredVouchers}
             itemContent={(index, voucher) => (
                 <VoucherItem voucher={voucher} index={index} />
             )}
             style={{ height: contentHeight }}
-            totalCount={vouchers?.message.length}
+            totalCount={filteredVouchers.length}
         />
     </div >
 }
@@ -748,7 +792,7 @@ const VoucherItem = ({ voucher, index }: { voucher: LinkedPayment, index: number
     const selectedBank = useAtomValue(selectedBankAccountAtom)
     const selectedTransaction = useAtomValue(bankRecSelectedTransactionAtom(selectedBank?.name || ''))
 
-    const { amountMatches, postingDateMatches, referenceDateMatches, referenceMatchesFull, referenceMatchesPartial, isSuggested } = useMemo(() => {
+    const { amountMatches, referenceMatchesFull, referenceMatchesPartial, isSuggested } = useMemo(() => {
 
         const transaction = selectedTransaction?.[0]
 
@@ -762,13 +806,11 @@ const VoucherItem = ({ voucher, index }: { voucher: LinkedPayment, index: number
         const postingDateMatches = voucher.posting_date === transaction?.date
         const referenceDateMatches = voucher.reference_date === transaction?.date
         const referenceMatchesFull = voucher.reference_no === transaction?.reference_number || voucher.reference_no === transaction?.description
-
         const referenceMatchesPartial = transaction?.reference_number?.includes(voucher.reference_no) || transaction?.description?.includes(voucher.reference_no)
-
 
         const isSuggested = amountMatches && (postingDateMatches || referenceDateMatches || referenceMatchesPartial) && index === 0
 
-        return { isSelected: false, amountMatches, postingDateMatches, referenceDateMatches, referenceMatchesFull, referenceMatchesPartial, isSuggested: isSuggested }
+        return { amountMatches, referenceMatchesFull, referenceMatchesPartial, isSuggested }
 
     }, [voucher, selectedTransaction, index])
 
@@ -789,65 +831,37 @@ const VoucherItem = ({ voucher, index }: { voucher: LinkedPayment, index: number
         >
 
             <div className="flex justify-between items-end gap-2">
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <Badge variant='secondary' className={cn("text-sm rounded-sm", isSuggested ? "bg-amber-100 text-amber-700" : "bg-secondary")}>{_(voucher.doctype)}</Badge>
+                <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant='secondary' className={cn("text-xs py-0.5 px-1 rounded-sm", isSuggested ? "bg-amber-100 text-amber-700" : "bg-secondary")}>{_(voucher.doctype)}</Badge>
                         <a target="_blank"
                             href={`/app/${slug(voucher.doctype)}/${voucher.name}`}
                             className="underline underline-offset-2 font-medium"
                         >{voucher.name}</a>
+                        {voucher.party && voucher.party_type && <>
+                            <span className="text-muted-foreground">&middot;</span>
+                            <a target="_blank"
+                                href={`/app/${slug(voucher.party_type)}/${voucher.party}`}
+                                className="underline underline-offset-2"
+                            >{voucher.party}</a>
+                        </>}
+                        <span className="text-muted-foreground">&middot;</span>
+                        <span className="font-semibold">{formatDate(voucher.posting_date)}</span>
                     </div>
-                    {voucher.party && voucher.party_type && <div className="flex items-center gap-2">
-                        <User size='18px' />
-                        <span>{_(voucher.party_type)}</span>
-                        <a target="_blank"
-                            href={`/app/${slug(voucher.party_type)}/${voucher.party}`}
-                            className="underline underline-offset-2 font-medium"
-                        >{voucher.party}</a>
-                    </div>}
-                    <TooltipProvider>
-                        <div className="flex items-center gap-1">
-                            <span>{_("Amount")}: <span className="font-bold font-mono">{formatCurrency(voucher.paid_amount, voucher.currency)}</span></span>
-                            {amountMatches ?
-                                <MatchBadge matchType="full" label={_("Amount matches the selected transaction")} />
-                                :
-                                <MatchBadge matchType="none" label={_("Amount does not match the selected transaction")} />
-                            }
-                        </div>
-                        <div className="flex gap-2 h-6">
-
-                            <div className="flex items-center gap-1">
-                                <span>{_("Posted On")}: <span className="font-bold">{formatDate(voucher.posting_date)}</span></span>
-                                <MatchBadge
-                                    matchType={postingDateMatches ? "full" : "none"}
-                                    label={postingDateMatches ? _("Posting date matches the transaction date") : _("Posting date does not match the transaction date")}
-                                />
-                            </div>
-                            {voucher.reference_date && <Separator orientation="vertical" className="h-4" />}
-                            {voucher.reference_date && <div className="flex items-center gap-1">
-                                <span>{_("Reference Date")}: <span className="font-bold">{formatDate(voucher.reference_date)}</span></span>
-                                <MatchBadge
-                                    matchType={referenceDateMatches ? "full" : "none"}
-                                    label={referenceDateMatches ? `${_("Reference date matches the transaction date")}` : `${_("Reference date does not match the transaction date")}`}
-                                />
-                            </div>}
-                        </div>
-                        <div className="flex items-start gap-1">
-                            <span className="font-medium">
-                                {voucher.reference_no}
-                                &nbsp;&nbsp;
-                                <Tooltip>
-                                    <TooltipTrigger>
-                                        <Badge className={cn("text-xs rounded-sm", referenceMatchesFull ? "bg-green-600 text-white" : referenceMatchesPartial ? "bg-amber-400 text-white" : "bg-red-500 text-white")}>
-                                            {referenceMatchesFull ? `${_("Complete Match")}` : referenceMatchesPartial ? `${_("Partial Match")}` : `${_("No Match")}`}</Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top">
-                                        {referenceMatchesFull ? `${_("Reference matches the selected transaction")}` : referenceMatchesPartial ? `${_("Reference matches the selected transaction partially")}` : `${_("Reference does not match the selected transaction")}`}
-                                    </TooltipContent>
-                                </Tooltip>
-                            </span>
-                        </div>
-                    </TooltipProvider>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {voucher.reference_no && <span>{_("Ref")}: {voucher.reference_no}</span>}
+                        <span className="text-muted-foreground">&middot;</span>
+                        <span className="font-semibold font-mono">{formatCurrency(voucher.paid_amount, voucher.currency)}</span>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <Badge className={cn("text-xs py-0.5 px-1 rounded-sm", referenceMatchesFull ? "bg-green-600 text-white" : referenceMatchesPartial ? "bg-amber-400 text-white" : "bg-red-500 text-white")}>
+                                    {referenceMatchesFull ? `${_("Complete Match")}` : referenceMatchesPartial ? `${_("Partial Match")}` : `${_("No Match")}`}</Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                                {referenceMatchesFull ? `${_("Reference matches the selected transaction")}` : referenceMatchesPartial ? `${_("Reference matches the selected transaction partially")}` : `${_("Reference does not match the selected transaction")}`}
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                 </div>
                 <div>
                     <Button variant='outline' className={
@@ -865,19 +879,6 @@ const VoucherItem = ({ voucher, index }: { voucher: LinkedPayment, index: number
     </div>
 }
 
-
-const MatchBadge = ({ matchType, label }: { matchType: 'full' | 'partial' | 'none', label: string }) => {
-    return <Tooltip>
-        <TooltipTrigger>
-            {matchType === 'full' ? <BadgeCheck className="text-white fill-green-600" /> : matchType === 'partial' ?
-                <Badge className="text-white bg-amber-400 rounded-sm">{_("Partial Match")}</Badge> :
-                <XCircle className="text-white fill-red-500" />}
-        </TooltipTrigger>
-        <TooltipContent>
-            {label}
-        </TooltipContent>
-    </Tooltip>
-}
 
 const OlderUnreconciledTransactionsBanner = () => {
 

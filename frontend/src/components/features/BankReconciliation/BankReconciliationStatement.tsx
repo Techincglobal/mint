@@ -12,13 +12,45 @@ import { formatCurrency } from "@/lib/numbers"
 import { getCompanyCurrency } from "@/lib/company"
 import { slug } from "@/lib/frappe"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Download } from "lucide-react"
 import ErrorBanner from "@/components/ui/error-banner"
 import { StatContainer, StatLabel, StatValue } from "@/components/ui/stats"
 import _ from "@/lib/translate"
 import { toast } from "sonner"
 import { useCopyToClipboard } from "usehooks-ts"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Button } from "@/components/ui/button"
+
+/** Downloads a query report the same way desk's own report Export button does --
+ * posts to `frappe.desk.query_report.export_query` via a hidden form so the browser
+ * handles the file response natively (XHR/fetch can't trigger a native download). */
+const downloadReport = (reportName: string, filters: string, fileFormatType: "CSV" | "Excel") => {
+    const form = document.createElement("form")
+    form.action = "/"
+    form.method = "POST"
+    form.style.display = "none"
+
+    const fields: Record<string, string> = {
+        cmd: "frappe.desk.query_report.export_query",
+        report_name: reportName,
+        filters,
+        file_format_type: fileFormatType,
+        visible_idx: "[]",
+        //@ts-expect-error - csrf_token is set on window by the Mint page template
+        csrf_token: window.csrf_token ?? "",
+    }
+
+    Object.entries(fields).forEach(([name, value]) => {
+        const input = document.createElement("textarea")
+        input.name = name
+        input.value = value
+        form.appendChild(input)
+    })
+
+    document.body.appendChild(form)
+    form.submit()
+    form.remove()
+}
 
 const BankReconciliationStatement = () => {
     const bankAccount = useAtomValue(selectedBankAccountAtom)
@@ -80,12 +112,18 @@ const BankReconciliationStatementView = () => {
 
     return <div className="space-y-4 py-2">
 
-        <div>
+        <div className="flex items-start justify-between gap-4">
             <Paragraph className="text-sm">
                 <span dangerouslySetInnerHTML={{
                     __html: _("Below is a list of all entries posted against the bank account {0} which have not been cleared till {1}.", [`<strong>${bankAccount?.account}</strong>`, `<strong>${formatDate(dates.toDate)}</strong>`])
                 }} />
             </Paragraph>
+            {data && data.message.result.length > 0 &&
+                <Button variant="outline" size="sm" className="shrink-0"
+                    onClick={() => downloadReport("Bank Reconciliation Statement", filters, "Excel")}>
+                    <Download className="w-4 h-4" /> {_("Download")}
+                </Button>
+            }
         </div>
 
         {error && <ErrorBanner error={error} />}
