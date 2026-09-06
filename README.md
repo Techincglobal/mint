@@ -40,6 +40,17 @@ It's built using [Frappe Framework](https://frappeframework.com) with a React ba
 
 <hr>
 
+### Customizations in this fork
+
+This repo is a fork of [The-Commit-Company/mint](https://github.com/The-Commit-Company/mint) (tracked as the `upstream` remote) with the following changes on top:
+
+- **Search on the "Match or Create" panel** — the vouchers panel now has its own search bar (fuzzy search on voucher name, party, reference number), matching the existing search on the left-hand "Unreconciled Transactions" panel.
+- **Compact voucher cards** — each voucher in "Match or Create" now renders as a 2-line card (doctype, voucher name, party, date on line 1; reference, amount, and match-quality badge on line 2) instead of the original multi-line layout, and the text size now matches the left panel.
+- **Search in the Bank Picker** — the bank-account picker now has a search bar. Rather than hiding non-matching banks (which is how Fuse.js's fuzzy matching happens to behave on short fields like bank names), it always shows every bank account and floats matches to the top, consistent with how search "feels" on the other two panels.
+- **Download button on the Bank Reconciliation Statement** — the statement view can now export itself to Excel directly, using Frappe's own `frappe.desk.query_report.export_query` endpoint (the same one desk's built-in report Export button uses), with the currently-applied bank account and as-of-date filters.
+
+None of this changes the underlying data model or existing behavior — it's additive UI/UX on top of upstream Mint.
+
 ### Features
 
 For a complete walkthrough of the features, you can refer to the following [YouTube video](https://youtu.be/nX9igS980MA?feature=shared)
