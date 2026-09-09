@@ -603,6 +603,7 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                     <TableHead>{_("Party")}</TableHead>
                     <TableHead>{_("Account")}</TableHead>
                     <TableHead>{_("Cost Center")}</TableHead>
+                    <TableHead>{_("Liabilities")}</TableHead>
                     <TableHead>{_("Remarks")}</TableHead>
                     <TableHead className="text-right">{_("Debit")}</TableHead>
                     <TableHead className="text-right">{_("Credit")}</TableHead>
@@ -663,6 +664,16 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                                 name={`entries.${index}.cost_center`}
                                 label={_("Cost Center")}
                                 filters={[["company", "=", company], ["is_group", "=", 0], ["disabled", "=", 0]]}
+                                buttonClassName="min-w-48"
+                                readOnly={index === 0}
+                                hideLabel
+                            />
+                        </TableCell>
+                        <TableCell className="align-top">
+                            <LinkFormField
+                                doctype="Liabilities"
+                                name={`entries.${index}.liabilities`}
+                                label={_("Liabilities")}
                                 buttonClassName="min-w-48"
                                 readOnly={index === 0}
                                 hideLabel

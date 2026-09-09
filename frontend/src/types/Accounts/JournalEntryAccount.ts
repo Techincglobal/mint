@@ -50,4 +50,6 @@ export interface JournalEntryAccount{
 	user_remark?: string
 	/**	Against Account : Text	*/
 	against_account?: string
+	/**	Liabilities : Link - Liabilities (Savinda custom Accounting Dimension)	*/
+	liabilities?: string
 }
