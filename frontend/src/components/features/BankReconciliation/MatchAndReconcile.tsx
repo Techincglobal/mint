@@ -851,7 +851,11 @@ const VoucherItem = ({ voucher, index }: { voucher: LinkedPayment, index: number
                     <div className="flex items-center gap-2 flex-wrap">
                         {voucher.reference_no && <span>{_("Ref")}: {voucher.reference_no}</span>}
                         <span className="text-muted-foreground">&middot;</span>
-                        <span className="font-semibold font-mono">{formatCurrency(voucher.paid_amount, voucher.currency)}</span>
+                        <span className="font-semibold font-mono">
+                            {formatCurrency(voucher.paid_amount, voucher.currency)}
+                            {voucher.base_currency && voucher.currency !== voucher.base_currency &&
+                                ` (${formatCurrency(voucher.base_amount, voucher.base_currency)})`}
+                        </span>
                         <Tooltip>
                             <TooltipTrigger>
                                 <Badge className={cn("text-xs py-0.5 px-1 rounded-sm", referenceMatchesFull ? "bg-green-600 text-white" : referenceMatchesPartial ? "bg-amber-400 text-white" : "bg-red-500 text-white")}>

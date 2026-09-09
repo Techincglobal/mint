@@ -2,9 +2,71 @@ import frappe
 from frappe import _
 import json
 import datetime
-from erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool import create_payment_entry_bts, create_journal_entry_bts
+from erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool import create_payment_entry_bts, create_journal_entry_bts, get_linked_payments
 from erpnext.accounts.party import get_party_account
 from erpnext import get_default_cost_center
+
+@frappe.whitelist()
+def get_linked_payments_enriched(bank_transaction_name,
+                                 document_types=None,
+                                 from_date=None,
+                                 to_date=None,
+                                 filter_by_reference_date=None,
+                                 from_reference_date=None,
+                                 to_reference_date=None):
+    """
+        Wraps ERPNext's own get_linked_payments -- for Payment Entry rows specifically,
+        ERPNext's own matching query returns base_paid_amount_after_tax (the company
+        currency / LKR equivalent) mislabelled with the account's own native currency
+        (e.g. USD), so the two never actually match. Journal Entry and Sales Invoice
+        rows from the same core function are already correctly paired and are left as-is.
+
+        Adds base_amount/base_currency to every voucher, and for Payment Entry rows
+        corrects "paid_amount"/"currency" back to the real native-currency figure,
+        since the frontend still relies on those two fields for matching logic
+        (amount/reference comparisons against the bank transaction).
+    """
+    vouchers = get_linked_payments(
+        bank_transaction_name,
+        document_types=document_types,
+        from_date=from_date,
+        to_date=to_date,
+        filter_by_reference_date=filter_by_reference_date,
+        from_reference_date=from_reference_date,
+        to_reference_date=to_reference_date,
+    )
+
+    company = frappe.db.get_value("Bank Transaction", bank_transaction_name, "company")
+    base_currency = frappe.get_cached_value("Company", company, "default_currency")
+
+    for voucher in vouchers:
+        if voucher.get("doctype") != "Payment Entry":
+            voucher["base_amount"] = voucher.get("paid_amount")
+            voucher["base_currency"] = base_currency
+            continue
+
+        pe = frappe.db.get_value(
+            "Payment Entry",
+            voucher["name"],
+            ["paid_amount", "received_amount", "paid_from_account_currency", "paid_to_account_currency", "base_paid_amount_after_tax"],
+            as_dict=True,
+        )
+        if not pe:
+            continue
+
+        # base_paid_amount_after_tax (what ERPNext's own query mislabels as "paid_amount")
+        # is already net of any prior partial allocation -- keep that as the accurate
+        # LKR figure, and pair it with the real native amount/currency instead.
+        voucher["base_amount"] = voucher.get("paid_amount")
+        voucher["base_currency"] = base_currency
+
+        if voucher.get("currency") == pe.paid_from_account_currency:
+            voucher["paid_amount"] = pe.paid_amount
+        elif voucher.get("currency") == pe.paid_to_account_currency:
+            voucher["paid_amount"] = pe.received_amount
+
+    return vouchers
+
 
 @frappe.whitelist()
 def clear_clearing_date(voucher_type: str, voucher_name: str):

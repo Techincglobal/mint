@@ -688,6 +688,7 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                                 isRequired
                                 hideLabel
                                 readOnly={index === 0}
+                                className="text-base md:text-base"
                                 style={index === 0 ? !isWithdrawal ? {
                                     color: "black",
                                 } : {} : {}}
@@ -708,6 +709,7 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                                 isRequired
                                 hideLabel
                                 readOnly={index === 0}
+                                className="text-base md:text-base"
                                 currency={currency}
                                 leftSlot={index === 0 && isWithdrawal ? <Tooltip>
                                     <TooltipTrigger asChild><ArrowUpRight className="text-destructive" /></TooltipTrigger>
