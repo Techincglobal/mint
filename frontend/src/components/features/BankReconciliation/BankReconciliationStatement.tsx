@@ -21,35 +21,76 @@ import { useCopyToClipboard } from "usehooks-ts"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 
-/** Downloads a query report the same way desk's own report Export button does --
- * posts to `frappe.desk.query_report.export_query` via a hidden form so the browser
- * handles the file response natively (XHR/fetch can't trigger a native download). */
-const downloadReport = (reportName: string, filters: string, fileFormatType: "CSV" | "Excel") => {
-    const form = document.createElement("form")
-    form.action = "/"
-    form.method = "POST"
-    form.style.display = "none"
-
-    const fields: Record<string, string> = {
-        cmd: "frappe.desk.query_report.export_query",
-        report_name: reportName,
-        filters,
-        file_format_type: fileFormatType,
-        visible_idx: "[]",
-        //@ts-expect-error - csrf_token is set on window by the Mint page template
-        csrf_token: window.csrf_token ?? "",
+/** CSV-escapes a single field: wraps in quotes if it contains a comma, quote or newline. */
+const csvField = (value: string | number | null | undefined): string => {
+    const str = String(value ?? "")
+    if (/[",\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`
     }
+    return str
+}
 
-    Object.entries(fields).forEach(([name, value]) => {
-        const input = document.createElement("textarea")
-        input.name = name
-        input.value = value
-        form.appendChild(input)
-    })
+/** Strips the leading account number and trailing company abbreviation from an
+ * Account name like "1-250206 - NDB Bank - C/A No: 101000652556 - SGSPL",
+ * leaving just "NDB Bank - C/A No: 101000652556". Account names follow
+ * Frappe's "<account_number> - <account_name> - <company_abbr>" convention;
+ * the account_name itself may contain further " - " segments, so only the
+ * first (account number) and last (company abbr) segments are dropped. */
+const friendlyAccountLabel = (accountLabel: string): string => {
+    const parts = accountLabel.split(" - ")
+    if (parts.length >= 3) {
+        return parts.slice(1, -1).join(" - ")
+    }
+    if (parts.length === 2) {
+        return parts[0]
+    }
+    return accountLabel
+}
 
-    document.body.appendChild(form)
-    form.submit()
-    form.remove()
+/** Downloads the statement as a CSV, with the bank account and date range shown
+ * as header rows -- the report's own filters aren't otherwise visible once the
+ * file is downloaded and separated from the page. */
+const downloadStatementCsv = (bankAccountLabel: string, fromDate: string, toDate: string, rows: BankClearanceSummaryEntry[]) => {
+    const friendlyLabel = friendlyAccountLabel(bankAccountLabel)
+
+    const headerRows = [
+        ["Bank Reconciliation Statement"],
+        ["Bank Account", friendlyLabel],
+        ["Period", `${formatDate(fromDate)} to ${formatDate(toDate)}`],
+        [],
+        ["Posting Date", "Document Type", "Payment Document", "Debit", "Credit", "Against Account", "Reference #", "Reference Date", "Clearance Date"],
+    ]
+
+    const dataRows = rows
+        .filter((row) => row.payment_entry)
+        .map((row) => [
+            formatDate(row.posting_date),
+            row.payment_document,
+            row.payment_entry,
+            row.debit,
+            row.credit,
+            row.against_account,
+            row.reference_no,
+            formatDate(row.ref_date),
+            formatDate(row.clearance_date),
+        ])
+
+    const csv = [...headerRows, ...dataRows]
+        .map((row) => row.map(csvField).join(","))
+        .join("\n")
+
+    // "C/A No: ..." style labels contain characters invalid in filenames on some OSes.
+    const safeFilenameLabel = friendlyLabel.replace(/[/\\:*?"<>|]/g, "-")
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `Bank Reconciliation Statement - ${safeFilenameLabel} - ${toDate}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
 }
 
 const BankReconciliationStatement = () => {
@@ -120,7 +161,7 @@ const BankReconciliationStatementView = () => {
             </Paragraph>
             {data && data.message.result.length > 0 &&
                 <Button variant="outline" size="sm" className="shrink-0"
-                    onClick={() => downloadReport("Bank Reconciliation Statement", filters, "Excel")}>
+                    onClick={() => downloadStatementCsv(bankAccount?.account ?? "", dates.fromDate, dates.toDate, data.message.result)}>
                     <Download className="w-4 h-4" /> {_("Download")}
                 </Button>
             }
