@@ -272,9 +272,10 @@ interface CurrencyFormFieldProps extends FormElementProps {
     currency?: string,
     style?: React.CSSProperties,
     leftSlot?: React.ReactNode,
+    className?: string,
 }
 
-export const CurrencyFormField = ({ name, rules, label, isRequired, formDescription, hideLabel, currency, disabled, readOnly, style = {}, leftSlot }: CurrencyFormFieldProps) => {
+export const CurrencyFormField = ({ name, rules, label, isRequired, formDescription, hideLabel, currency, disabled, readOnly, style = {}, leftSlot, className }: CurrencyFormFieldProps) => {
 
     const { control } = useFormContext()
 
@@ -305,6 +306,7 @@ export const CurrencyFormField = ({ name, rules, label, isRequired, formDescript
         return <CurrencyInput
             ref={field.ref}
             name={field.name}
+            className={className}
             style={{
                 textAlign: 'right',
                 ...style
