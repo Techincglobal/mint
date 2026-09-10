@@ -699,10 +699,10 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                                 isRequired
                                 hideLabel
                                 readOnly={index === 0}
-                                className="text-base md:text-base"
-                                style={index === 0 ? !isWithdrawal ? {
-                                    color: "black",
-                                } : {} : {}}
+                                style={{
+                                    fontSize: '1rem',
+                                    ...(index === 0 ? !isWithdrawal ? { color: "black" } : {} : {})
+                                }}
                                 currency={currency}
                                 leftSlot={index === 0 && !isWithdrawal ? <Tooltip>
                                     <TooltipTrigger asChild><ArrowDownRight className="text-green-600" /></TooltipTrigger>
@@ -713,14 +713,14 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                         <TableCell className={cn("text-right align-top")}>
                             <CurrencyFormField
                                 name={`entries.${index}.credit`}
-                                style={index === 0 && isWithdrawal ? {
-                                    color: "black",
-                                } : {}}
+                                style={{
+                                    fontSize: '1rem',
+                                    ...(index === 0 && isWithdrawal ? { color: "black" } : {})
+                                }}
                                 label={_("Credit")}
                                 isRequired
                                 hideLabel
                                 readOnly={index === 0}
-                                className="text-base md:text-base"
                                 currency={currency}
                                 leftSlot={index === 0 && isWithdrawal ? <Tooltip>
                                     <TooltipTrigger asChild><ArrowUpRight className="text-destructive" /></TooltipTrigger>
